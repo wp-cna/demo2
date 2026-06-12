@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sunlight: Eight Minutes to Earth — an interactive wave–particle demo</title>
+<style>
+  :root {
+    --accent: #7fff6a;
+    --panel-bg: rgba(8, 12, 24, 0.78);
+    --panel-border: rgba(255, 255, 255, 0.14);
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    height: 100%;
+    overflow: hidden;
+    background: #02030a;
+    color: #e8ecf5;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  #scene { position: fixed; inset: 0; display: block; }
+  .panel {
+    position: fixed;
+    background: var(--panel-bg);
+    border: 1px solid var(--panel-border);
+    border-radius: 12px;
+    padding: 14px 16px;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+  #intro {
+    top: 16px;
+    left: 16px;
+    max-width: 360px;
+  }
+  #intro h1 {
+    margin: 0 0 6px;
+    font-size: 17px;
+    letter-spacing: 0.2px;
+  }
+  #intro p {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.5;
+    color: #c2cbe0;
+  }
+  #modeNote {
+    margin-top: 10px !important;
+    padding-top: 10px;
+    border-top: 1px solid var(--panel-border);
+    color: #e8ecf5 !important;
+  }
+  #stats {
+    top: 16px;
+    right: 16px;
+    width: 250px;
+    font-size: 13px;
+  }
+  #stats .row {
+    display: flex;
+    justify-content: space-between;
+    margin: 4px 0;
+    color: #c2cbe0;
+  }
+  #stats .row strong { color: #fff; font-variant-numeric: tabular-nums; }
+  #progressTrack {
+    height: 6px;
+    border-radius: 3px;
+    background: rgba(255,255,255,0.12);
+    margin-top: 10px;
+    overflow: hidden;
+  }
+  #progressFill {
+    height: 100%;
+    width: 0%;
+    border-radius: 3px;
+    background: var(--accent);
+    transition: width 0.1s linear;
+  }
+  #arrival {
+    margin-top: 10px;
+    font-size: 13px;
+    color: var(--accent);
+    display: none;
+  }
+  #controls {
+    left: 50%;
+    bottom: 16px;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    flex-wrap: wrap;
+    justify-content: center;
+    max-width: calc(100vw - 32px);
+  }
+  .group { display: flex; align-items: center; gap: 8px; }
+  .group label { font-size: 12px; color: #9aa6c0; white-space: nowrap; }
+  .modes { display: flex; border: 1px solid var(--panel-border); border-radius: 8px; overflow: hidden; }
+  .modes button {
+    background: transparent;
+    border: none;
+    color: #c2cbe0;
+    font-size: 13px;
+    padding: 7px 14px;
+    cursor: pointer;
+  }
+  .modes button + button { border-left: 1px solid var(--panel-border); }
+  .modes button.active { background: var(--accent); color: #04070f; font-weight: 600; }
+  button.icon {
+    background: rgba(255,255,255,0.1);
+    border: 1px solid var(--panel-border);
+    border-radius: 8px;
+    color: #fff;
+    font-size: 13px;
+    padding: 7px 14px;
+    cursor: pointer;
+  }
+  button.icon:hover, .modes button:hover:not(.active) { background: rgba(255,255,255,0.18); }
+  input[type="range"] { accent-color: var(--accent); width: 130px; }
+  input[type="checkbox"] { accent-color: var(--accent); }
+  #lambdaVal, #speedVal { font-size: 12px; color: #fff; font-variant-numeric: tabular-nums; min-width: 52px; }
+  #swatch {
+    width: 14px; height: 14px; border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 8px var(--accent);
+  }
+  #footnote {
+    position: fixed;
+    bottom: 16px;
+    right: 16px;
+    font-size: 11px;
+    color: #6b7693;
+    max-width: 240px;
+    text-align: right;
+  }
+  @media (max-width: 720px) {
+    #intro { max-width: calc(100vw - 32px); }
+    #stats { display: none; }
+    #footnote { display: none; }
+  }
+</style>
+</head>
+<body>
+<canvas id="scene"></canvas>
+
+<div class="panel" id="intro">
+  <h1>Sunlight: eight minutes to Earth</h1>
+  <p>A single quantum of light leaves the Sun and crosses 149.6 million km of space.
+     Drag to orbit, scroll to zoom. Is it a wave or a particle? Try all three views.</p>
+  <p id="modeNote"></p>
+</div>
+
+<div class="panel" id="stats">
+  <div class="row"><span>Light-time elapsed</span><strong id="statTime">0:00 / 8:19</strong></div>
+  <div class="row"><span>Distance covered</span><strong id="statDist">0.0 M km</strong></div>
+  <div class="row"><span>Wavelength</span><strong id="statLambda">550 nm</strong></div>
+  <div class="row"><span>Photon energy</span><strong id="statEnergy">2.25 eV</strong></div>
+  <div id="progressTrack"><div id="progressFill"></div></div>
+  <div id="arrival">Arrived! Absorbed as a single particle. ↻ Restart to send another.</div>
+</div>
+
+<div class="panel" id="controls">
+  <div class="modes" id="modes">
+    <button data-mode="wave">Wave</button>
+    <button data-mode="particle">Particle</button>
+    <button data-mode="both" class="active">Both</button>
+  </div>
+  <div class="group">
+    <div id="swatch"></div>
+    <label for="lambda">Wavelength</label>
+    <input type="range" id="lambda" min="380" max="750" value="550" step="1">
+    <span id="lambdaVal">550 nm</span>
+  </div>
+  <div class="group">
+    <label for="speed">Journey</label>
+    <input type="range" id="speed" min="6" max="60" value="24" step="1">
+    <span id="speedVal">24 s</span>
+  </div>
+  <div class="group">
+    <input type="checkbox" id="showB" checked>
+    <label for="showB">Magnetic field</label>
+  </div>
+  <div class="group">
+    <input type="checkbox" id="follow">
+    <label for="follow">Follow photon</label>
+  </div>
+  <button class="icon" id="playPause">Pause</button>
+  <button class="icon" id="restart">↻ Restart</button>
+</div>
+
+<div id="footnote">
+  Sizes and distance are wildly compressed: the Sun is 109 Earth-diameters wide,
+  and the real gap is about 11,700 Earth-diameters. Wave amplitude is symbolic.
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "../vendor/three/three.module.min.js",
+    "three/addons/controls/OrbitControls.js": "../vendor/three/OrbitControls.js"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from "three";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+
+// ---------- constants ----------
+const SUN_X = -75, EARTH_X = 75;
+const SUN_R = 12, EARTH_R = 4;
+const START_X = SUN_X + SUN_R + 1;   // photon leaves the photosphere
+const END_X = EARTH_X - EARTH_R;     // and is absorbed at the surface
+const LIGHT_TIME_S = 499;            // ~8 min 19 s, 1 AU at c
+const AU_MKM = 149.6;                // million km
+const AMP = 4.5;                     // symbolic field amplitude (scene units)
+const N_WAVE = 900;                  // wave polyline resolution
+
+const state = {
+  mode: "both",                      // wave | particle | both
+  lambdaNm: 550,
+  journeySec: 24,
+  progress: 0,
+  playing: true,
+  showB: true,
+  follow: false,
+  flash: 0
+};
+
+// ---------- helpers ----------
+// Approximate visible-spectrum wavelength (nm) to RGB, 380-750.
+function wavelengthToRGB(nm) {
+  let r = 0, g = 0, b = 0;
+  if (nm < 440)      { r = -(nm - 440) / 60; b = 1; }
+  else if (nm < 490) { g = (nm - 440) / 50; b = 1; }
+  else if (nm < 510) { g = 1; b = -(nm - 510) / 20; }
+  else if (nm < 580) { r = (nm - 510) / 70; g = 1; }
+  else if (nm < 645) { r = 1; g = -(nm - 645) / 65; }
+  else               { r = 1; }
+  let f = 1;
+  if (nm < 420) f = 0.4 + 0.6 * (nm - 380) / 40;
+  else if (nm > 700) f = 0.4 + 0.6 * (750 - nm) / 50;
+  const gam = (v) => Math.pow(Math.max(v * f, 0), 0.8);
+  return new THREE.Color(gam(r), gam(g), gam(b));
+}
+
+function glowTexture(inner = "rgba(255,255,255,1)") {
+  const c = document.createElement("canvas");
+  c.width = c.height = 128;
+  const ctx = c.getContext("2d");
+  const grad = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
+  grad.addColorStop(0, inner);
+  grad.addColorStop(0.25, "rgba(255,255,255,0.55)");
+  grad.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 128, 128);
+  return new THREE.CanvasTexture(c);
+}
+
+function earthTexture() {
+  const c = document.createElement("canvas");
+  c.width = 512; c.height = 256;
+  const ctx = c.getContext("2d");
+  const sea = ctx.createLinearGradient(0, 0, 0, 256);
+  sea.addColorStop(0, "#16395f");
+  sea.addColorStop(0.5, "#1c5085");
+  sea.addColorStop(1, "#16395f");
+  ctx.fillStyle = sea;
+  ctx.fillRect(0, 0, 512, 256);
+  // pseudo-random continents (fixed seed so it looks the same every load)
+  let s = 42;
+  const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
+  ctx.fillStyle = "#2e7d44";
+  for (let i = 0; i < 90; i++) {
+    const x = rnd() * 512, y = 40 + rnd() * 176, r = 6 + rnd() * 26;
+    ctx.beginPath();
+    ctx.ellipse(x, y, r, r * (0.5 + rnd() * 0.6), rnd() * Math.PI, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.fillStyle = "rgba(255,255,255,0.9)";
+  ctx.fillRect(0, 0, 512, 14);
+  ctx.fillRect(0, 242, 512, 14);
+  ctx.fillStyle = "rgba(255,255,255,0.25)";
+  for (let i = 0; i < 60; i++) {
+    const x = rnd() * 512, y = rnd() * 256, r = 4 + rnd() * 14;
+    ctx.beginPath();
+    ctx.ellipse(x, y, r, r * 0.35, rnd() * Math.PI, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+// ---------- renderer / scene ----------
+const canvas = document.getElementById("scene");
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 3000);
+camera.position.set(-10, 38, 125);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.06;
+controls.maxDistance = 700;
+controls.minDistance = 15;
+
+scene.add(new THREE.AmbientLight(0x223044, 1.2));
+const sunLight = new THREE.PointLight(0xfff2cc, 30000, 0, 2);
+sunLight.position.set(SUN_X, 0, 0);
+scene.add(sunLight);
+
+// stars
+{
+  const n = 2500;
+  const pos = new Float32Array(n * 3);
+  const col = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) {
+    const v = new THREE.Vector3().randomDirection().multiplyScalar(900 + Math.random() * 600);
+    pos.set([v.x, v.y, v.z], i * 3);
+    const t = 0.55 + Math.random() * 0.45;
+    col.set([t, t, Math.min(1, t + Math.random() * 0.15)], i * 3);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+  g.setAttribute("color", new THREE.BufferAttribute(col, 3));
+  scene.add(new THREE.Points(g, new THREE.PointsMaterial({ size: 1.6, vertexColors: true, sizeAttenuation: false })));
+}
+
+// sun
+const sun = new THREE.Mesh(
+  new THREE.SphereGeometry(SUN_R, 48, 32),
+  new THREE.MeshBasicMaterial({ color: 0xffdd66 })
+);
+sun.position.set(SUN_X, 0, 0);
+scene.add(sun);
+
+const sunGlow = new THREE.Sprite(new THREE.SpriteMaterial({
+  map: glowTexture("rgba(255,230,150,1)"),
+  color: 0xffcc55,
+  transparent: true,
+  opacity: 0.9,
+  blending: THREE.AdditiveBlending,
+  depthWrite: false
+}));
+sunGlow.scale.setScalar(SUN_R * 5.2);
+sunGlow.position.copy(sun.position);
+scene.add(sunGlow);
+
+// earth
+const earth = new THREE.Mesh(
+  new THREE.SphereGeometry(EARTH_R, 48, 32),
+  new THREE.MeshPhongMaterial({ map: earthTexture(), shininess: 18, specular: 0x335577 })
+);
+earth.position.set(EARTH_X, 0, 0);
+scene.add(earth);
+
+const atmosphere = new THREE.Mesh(
+  new THREE.SphereGeometry(EARTH_R * 1.12, 48, 32),
+  new THREE.MeshBasicMaterial({
+    color: 0x4f9aff, transparent: true, opacity: 0.14,
+    blending: THREE.AdditiveBlending, side: THREE.BackSide, depthWrite: false
+  })
+);
+atmosphere.position.copy(earth.position);
+scene.add(atmosphere);
+
+// faint guide line for the photon's path
+{
+  const g = new THREE.BufferGeometry().setFromPoints([
+    new THREE.Vector3(START_X, 0, 0), new THREE.Vector3(END_X, 0, 0)
+  ]);
+  scene.add(new THREE.Line(g, new THREE.LineBasicMaterial({
+    color: 0xffffff, transparent: true, opacity: 0.07
+  })));
+}
+
+// ---------- the light itself ----------
+// E-field (vertical) and B-field (horizontal) polylines
+function makeWaveLine(opacity) {
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.BufferAttribute(new Float32Array(N_WAVE * 3), 3));
+  g.setDrawRange(0, 0);
+  const m = new THREE.LineBasicMaterial({
+    transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false
+  });
+  const line = new THREE.Line(g, m);
+  line.frustumCulled = false;
+  scene.add(line);
+  return line;
+}
+const eLine = makeWaveLine(0.95);
+const bLine = makeWaveLine(0.45);
+bLine.material.color.set(0x66aaff);
+
+// photon sprite + fading trail
+const photon = new THREE.Sprite(new THREE.SpriteMaterial({
+  map: glowTexture(),
+  transparent: true,
+  blending: THREE.AdditiveBlending,
+  depthWrite: false
+}));
+photon.scale.setScalar(7);
+scene.add(photon);
+
+const TRAIL_N = 90;
+const trailGeom = new THREE.BufferGeometry();
+trailGeom.setAttribute("position", new THREE.BufferAttribute(new Float32Array(TRAIL_N * 3), 3));
+trailGeom.setAttribute("color", new THREE.BufferAttribute(new Float32Array(TRAIL_N * 3), 3));
+trailGeom.setDrawRange(0, 0);
+const trail = new THREE.Line(trailGeom, new THREE.LineBasicMaterial({
+  vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false
+}));
+trail.frustumCulled = false;
+scene.add(trail);
+const trailPts = [];
+
+// ---------- UI wiring ----------
+const $ = (id) => document.getElementById(id);
+const modeNotes = {
+  wave: "WAVE: light propagates as an electromagnetic wave — an oscillating electric field (colored) and magnetic field (blue), each perpendicular to the other and to the direction of travel. Wavelength sets the color.",
+  particle: "PARTICLE: light is emitted and absorbed in indivisible packets of energy — photons. Each carries E = hc/λ, no more, no less. That's how sunlight kicks single electrons out of metal.",
+  both: "BOTH (the real answer): a photon travels as a spread-out wave packet and interacts as a point-like particle. Wave–particle duality isn't a paradox — it's just what quanta are."
+};
+
+function setMode(mode) {
+  state.mode = mode;
+  document.querySelectorAll("#modes button").forEach((b) =>
+    b.classList.toggle("active", b.dataset.mode === mode));
+  $("modeNote").textContent = modeNotes[mode];
+}
+document.querySelectorAll("#modes button").forEach((b) =>
+  b.addEventListener("click", () => setMode(b.dataset.mode)));
+setMode("both");
+
+let photonColor = new THREE.Color();
+function applyWavelength(nm) {
+  state.lambdaNm = nm;
+  photonColor = wavelengthToRGB(nm);
+  const css = "#" + photonColor.getHexString();
+  document.documentElement.style.setProperty("--accent", css);
+  eLine.material.color.copy(photonColor);
+  photon.material.color.copy(photonColor);
+  $("lambdaVal").textContent = nm + " nm";
+  $("statLambda").textContent = nm + " nm";
+  $("statEnergy").textContent = (1239.84 / nm).toFixed(2) + " eV";
+}
+$("lambda").addEventListener("input", (e) => applyWavelength(+e.target.value));
+applyWavelength(550);
+
+$("speed").addEventListener("input", (e) => {
+  state.journeySec = +e.target.value;
+  $("speedVal").textContent = state.journeySec + " s";
+});
+$("showB").addEventListener("change", (e) => { state.showB = e.target.checked; });
+$("follow").addEventListener("change", (e) => { state.follow = e.target.checked; });
+
+function setPlaying(p) {
+  state.playing = p;
+  $("playPause").textContent = p ? "Pause" : "Play";
+}
+$("playPause").addEventListener("click", () => {
+  if (state.progress >= 1) restart(); else setPlaying(!state.playing);
+});
+function restart() {
+  state.progress = 0;
+  state.flash = 0;
+  trailPts.length = 0;
+  $("arrival").style.display = "none";
+  setPlaying(true);
+}
+$("restart").addEventListener("click", restart);
+
+window.addEventListener("resize", () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// ---------- per-frame updates ----------
+function sceneWavelength() {
+  // map 380-750 nm onto 2.2-5.2 scene units so the slider visibly stretches the wave
+  return 2.2 + ((state.lambdaNm - 380) / 370) * 3;
+}
+
+function updateWave(headX, time) {
+  const showWave = state.mode !== "particle" && state.progress > 0;
+  eLine.visible = showWave;
+  bLine.visible = showWave && state.showB;
+  if (!showWave) return;
+
+  const lam = sceneWavelength();
+  const k = (Math.PI * 2) / lam;
+  const omega = k * ((END_X - START_X) / state.journeySec); // crests move at the photon's speed ("c")
+  const sigma = lam * 1.4;
+  const packetCenter = headX - sigma * 1.2;
+
+  const ePos = eLine.geometry.attributes.position.array;
+  const bPos = bLine.geometry.attributes.position.array;
+  const span = headX - START_X;
+  let count = 0;
+  for (let i = 0; i < N_WAVE; i++) {
+    const x = START_X + (span * i) / (N_WAVE - 1);
+    let env;
+    if (state.mode === "wave") {
+      env = Math.min(1, (x - START_X) / 6, Math.max(0, (headX - x) / 4));
+    } else {
+      const d = x - packetCenter;
+      env = Math.exp(-(d * d) / (2 * sigma * sigma));
+      if (x > headX) env = 0;
+    }
+    const osc = AMP * Math.max(env, 0) * Math.sin(k * (x - START_X) - omega * time);
+    ePos[count * 3] = x; ePos[count * 3 + 1] = osc; ePos[count * 3 + 2] = 0;
+    bPos[count * 3] = x; bPos[count * 3 + 1] = 0;  bPos[count * 3 + 2] = osc;
+    count++;
+  }
+  eLine.geometry.setDrawRange(0, count);
+  bLine.geometry.setDrawRange(0, count);
+  eLine.geometry.attributes.position.needsUpdate = true;
+  bLine.geometry.attributes.position.needsUpdate = true;
+}
+
+function updatePhoton(headPos) {
+  const showDot = state.mode !== "wave";
+  photon.visible = showDot && (state.progress > 0 && state.progress < 1 || state.flash > 0);
+  trail.visible = state.mode === "particle" && state.progress > 0;
+  if (!showDot) { trailGeom.setDrawRange(0, 0); return; }
+
+  photon.position.copy(headPos);
+  photon.scale.setScalar(7 * (1 + state.flash * 4));
+  photon.material.opacity = state.progress >= 1 ? state.flash : 1;
+
+  if (trail.visible && state.playing && state.progress < 1) {
+    trailPts.push(headPos.clone());
+    if (trailPts.length > TRAIL_N) trailPts.shift();
+  }
+  const p = trailGeom.attributes.position.array;
+  const c = trailGeom.attributes.color.array;
+  for (let i = 0; i < trailPts.length; i++) {
+    const fade = i / Math.max(trailPts.length - 1, 1); // oldest -> 0, newest -> 1
+    p[i * 3] = trailPts[i].x; p[i * 3 + 1] = trailPts[i].y; p[i * 3 + 2] = trailPts[i].z;
+    c[i * 3] = photonColor.r * fade; c[i * 3 + 1] = photonColor.g * fade; c[i * 3 + 2] = photonColor.b * fade;
+  }
+  trailGeom.setDrawRange(0, trailPts.length);
+  trailGeom.attributes.position.needsUpdate = true;
+  trailGeom.attributes.color.needsUpdate = true;
+}
+
+function updateStats() {
+  const t = Math.round(state.progress * LIGHT_TIME_S);
+  const mm = Math.floor(t / 60), ss = String(t % 60).padStart(2, "0");
+  $("statTime").textContent = mm + ":" + ss + " / 8:19";
+  $("statDist").textContent = (state.progress * AU_MKM).toFixed(1) + " M km";
+  $("progressFill").style.width = (state.progress * 100).toFixed(1) + "%";
+}
+
+const clock = new THREE.Clock();
+let simTime = 0;
+
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.1);
+
+  if (state.playing && state.progress < 1) {
+    state.progress += dt / state.journeySec;
+    simTime += dt;
+    if (state.progress >= 1) {
+      state.progress = 1;
+      state.flash = 1;
+      setPlaying(false);
+      $("playPause").textContent = "Play";
+      $("arrival").style.display = "block";
+    }
+  }
+  if (state.flash > 0) state.flash = Math.max(0, state.flash - dt * 0.8);
+  atmosphere.material.opacity = 0.14 + state.flash * 0.5;
+
+  const headX = THREE.MathUtils.lerp(START_X, END_X, state.progress);
+  const headPos = new THREE.Vector3(headX, 0, 0);
+
+  updateWave(headX, simTime);
+  updatePhoton(headPos);
+  updateStats();
+
+  earth.rotation.y += dt * 0.15;
+  sunGlow.scale.setScalar(SUN_R * (5.2 + Math.sin(simTime * 2.1) * 0.25 + Math.sin(simTime * 5.7) * 0.1));
+
+  if (state.follow && state.progress > 0 && state.progress < 1) {
+    controls.target.lerp(headPos, 0.06);
+  }
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+</script>
+</body>
+</html>
