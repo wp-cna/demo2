@@ -65,21 +65,29 @@
   }
   #stats .row strong { color: #fff; font-variant-numeric: tabular-nums; }
   #progressTrack {
-    height: 6px;
-    border-radius: 3px;
+    height: 10px;
+    border-radius: 5px;
     background: rgba(255,255,255,0.12);
     margin-top: 10px;
     overflow: hidden;
+    cursor: pointer;
+    touch-action: none;
   }
   #progressFill {
     height: 100%;
     width: 0%;
-    border-radius: 3px;
+    border-radius: 5px;
     background: var(--accent);
-    transition: width 0.1s linear;
+    pointer-events: none;
+  }
+  #scrubHint {
+    font-size: 10px;
+    color: #6b7693;
+    margin-top: 4px;
+    text-align: right;
   }
   #arrival {
-    margin-top: 10px;
+    margin-top: 8px;
     font-size: 13px;
     color: var(--accent);
     display: none;
@@ -90,7 +98,7 @@
     transform: translateX(-50%);
     display: flex;
     align-items: center;
-    gap: 18px;
+    gap: 10px 16px;
     flex-wrap: wrap;
     justify-content: center;
     max-width: calc(100vw - 32px);
@@ -117,12 +125,27 @@
     padding: 7px 14px;
     cursor: pointer;
   }
+  button.icon.sm { padding: 5px 9px; font-size: 12px; }
   button.icon:hover, .modes button:hover:not(.active) { background: rgba(255,255,255,0.18); }
-  input[type="range"] { accent-color: var(--accent); width: 130px; }
-  input[type="checkbox"] { accent-color: var(--accent); }
+  button:focus-visible, input:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+  #presets { gap: 6px; }
+  #presets .dot {
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.35);
+    padding: 0;
+    cursor: pointer;
+  }
+  input[type="range"] { accent-color: var(--accent); width: 120px; }
+  input[type="range"]:disabled { opacity: 0.4; }
+  input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px; }
   #lambdaVal, #speedVal { font-size: 12px; color: #fff; font-variant-numeric: tabular-nums; min-width: 52px; }
   #swatch {
     width: 14px; height: 14px; border-radius: 50%;
+    flex: none;
     background: var(--accent);
     box-shadow: 0 0 8px var(--accent);
   }
@@ -135,10 +158,31 @@
     max-width: 240px;
     text-align: right;
   }
+  #shortcuts {
+    position: fixed;
+    bottom: 16px;
+    left: 16px;
+    font-size: 11px;
+    color: #6b7693;
+  }
+  @media (max-width: 900px) {
+    #footnote, #shortcuts { display: none; }
+  }
   @media (max-width: 720px) {
-    #intro { max-width: calc(100vw - 32px); }
-    #stats { display: none; }
-    #footnote { display: none; }
+    #intro p:not(#modeNote) { display: none; }
+    #intro { max-width: 46vw; padding: 10px 12px; }
+    #intro h1 { font-size: 13px; margin-bottom: 0; }
+    #modeNote { font-size: 11px; margin-top: 6px !important; padding-top: 6px; }
+    #stats { width: 48vw; max-width: 215px; padding: 10px 12px; font-size: 11px; }
+    #scrubHint { display: none; }
+    #controls { gap: 8px 12px; padding: 10px 12px; bottom: 8px; }
+    .modes button { padding: 6px 10px; font-size: 12px; }
+    button.icon { padding: 6px 10px; }
+    input[type="range"] { width: 84px; }
+    .group label { font-size: 11px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #progressFill { transition: none; }
   }
 </style>
 </head>
@@ -148,7 +192,8 @@
 <div class="panel" id="intro">
   <h1>Sunlight: eight minutes to Earth</h1>
   <p>A single quantum of light leaves the Sun and crosses 149.6 million km of space.
-     Drag to orbit, scroll to zoom. Is it a wave or a particle? Try all three views.</p>
+     Drag to orbit, pinch or scroll to zoom, and drag the progress bar to scrub.
+     Is it a wave or a particle? Try all three views.</p>
   <p id="modeNote"></p>
 </div>
 
@@ -156,8 +201,10 @@
   <div class="row"><span>Light-time elapsed</span><strong id="statTime">0:00 / 8:19</strong></div>
   <div class="row"><span>Distance covered</span><strong id="statDist">0.0 M km</strong></div>
   <div class="row"><span>Wavelength</span><strong id="statLambda">550 nm</strong></div>
+  <div class="row"><span>Frequency</span><strong id="statFreq">545 THz</strong></div>
   <div class="row"><span>Photon energy</span><strong id="statEnergy">2.25 eV</strong></div>
   <div id="progressTrack"><div id="progressFill"></div></div>
+  <div id="scrubHint">drag bar to scrub</div>
   <div id="arrival">Arrived! Absorbed as a single particle. ↻ Restart to send another.</div>
 </div>
 
@@ -166,6 +213,13 @@
     <button data-mode="wave">Wave</button>
     <button data-mode="particle">Particle</button>
     <button data-mode="both" class="active">Both</button>
+  </div>
+  <div class="group" id="presets">
+    <button class="dot" data-nm="410" title="Violet · 410 nm" aria-label="Violet, 410 nanometers"></button>
+    <button class="dot" data-nm="470" title="Blue · 470 nm" aria-label="Blue, 470 nanometers"></button>
+    <button class="dot" data-nm="550" title="Green · 550 nm" aria-label="Green, 550 nanometers"></button>
+    <button class="dot" data-nm="600" title="Orange · 600 nm" aria-label="Orange, 600 nanometers"></button>
+    <button class="dot" data-nm="680" title="Red · 680 nm" aria-label="Red, 680 nanometers"></button>
   </div>
   <div class="group">
     <div id="swatch"></div>
@@ -179,16 +233,29 @@
     <span id="speedVal">24 s</span>
   </div>
   <div class="group">
+    <input type="checkbox" id="realTime">
+    <label for="realTime">Real time</label>
+  </div>
+  <div class="group">
     <input type="checkbox" id="showB" checked>
-    <label for="showB">Magnetic field</label>
+    <label for="showB">B-field</label>
   </div>
   <div class="group">
     <input type="checkbox" id="follow">
-    <label for="follow">Follow photon</label>
+    <label for="follow">Follow</label>
+  </div>
+  <div class="group">
+    <label>View</label>
+    <button class="icon sm" id="viewOverview">Overview</button>
+    <button class="icon sm" id="viewSun">Sun</button>
+    <button class="icon sm" id="viewEarth">Earth</button>
   </div>
   <button class="icon" id="playPause">Pause</button>
-  <button class="icon" id="restart">↻ Restart</button>
+  <button class="icon" id="restart" title="Restart">↻</button>
+  <button class="icon" id="fs" title="Fullscreen">⛶</button>
 </div>
+
+<div id="shortcuts">space play/pause · R restart · 1/2/3 wave/particle/both</div>
 
 <div id="footnote">
   Sizes and distance are wildly compressed: the Sun is 109 Earth-diameters wide,
@@ -419,6 +486,27 @@ trail.frustumCulled = false;
 scene.add(trail);
 const trailPts = [];
 
+// ambient photon flux, visible in particle mode: the Sun emits ~1e45 photons/s,
+// so the hero photon is never traveling alone
+const STREAM_N = 160;
+const streamProg = new Float32Array(STREAM_N);
+const streamOff = new Float32Array(STREAM_N * 2);
+for (let i = 0; i < STREAM_N; i++) {
+  streamProg[i] = Math.random();
+  const ang = Math.random() * Math.PI * 2;
+  const rad = 1.5 + Math.random() * 6.5;
+  streamOff[i * 2] = Math.cos(ang) * rad;
+  streamOff[i * 2 + 1] = Math.sin(ang) * rad;
+}
+const streamGeom = new THREE.BufferGeometry();
+streamGeom.setAttribute("position", new THREE.BufferAttribute(new Float32Array(STREAM_N * 3), 3));
+const stream = new THREE.Points(streamGeom, new THREE.PointsMaterial({
+  size: 1.7, transparent: true, opacity: 0.45,
+  blending: THREE.AdditiveBlending, depthWrite: false
+}));
+stream.frustumCulled = false;
+scene.add(stream);
+
 // ---------- UI wiring ----------
 const $ = (id) => document.getElementById(id);
 const modeNotes = {
@@ -445,17 +533,38 @@ function applyWavelength(nm) {
   document.documentElement.style.setProperty("--accent", css);
   eLine.material.color.copy(photonColor);
   photon.material.color.copy(photonColor);
+  stream.material.color.copy(photonColor).multiplyScalar(0.75);
   $("lambdaVal").textContent = nm + " nm";
   $("statLambda").textContent = nm + " nm";
+  $("statFreq").textContent = Math.round(299792.458 / nm) + " THz";
   $("statEnergy").textContent = (1239.84 / nm).toFixed(2) + " eV";
 }
 $("lambda").addEventListener("input", (e) => applyWavelength(+e.target.value));
 applyWavelength(550);
 
-$("speed").addEventListener("input", (e) => {
-  state.journeySec = +e.target.value;
-  $("speedVal").textContent = state.journeySec + " s";
+const presetButtons = document.querySelectorAll("#presets button");
+presetButtons.forEach((b) => {
+  b.style.background = "#" + wavelengthToRGB(+b.dataset.nm).getHexString();
+  b.addEventListener("click", () => {
+    $("lambda").value = b.dataset.nm;
+    applyWavelength(+b.dataset.nm);
+  });
 });
+
+function applyJourney() {
+  if ($("realTime").checked) {
+    state.journeySec = LIGHT_TIME_S;
+    $("speed").disabled = true;
+    $("speedVal").textContent = "8:19";
+  } else {
+    state.journeySec = +$("speed").value;
+    $("speed").disabled = false;
+    $("speedVal").textContent = state.journeySec + " s";
+  }
+}
+$("speed").addEventListener("input", applyJourney);
+$("realTime").addEventListener("change", applyJourney);
+
 $("showB").addEventListener("change", (e) => { state.showB = e.target.checked; });
 $("follow").addEventListener("change", (e) => { state.follow = e.target.checked; });
 
@@ -475,11 +584,83 @@ function restart() {
 }
 $("restart").addEventListener("click", restart);
 
+// scrub the journey by dragging the progress bar
+function setProgress(f) {
+  state.progress = Math.min(1, Math.max(0, f));
+  if (state.progress < 1) {
+    state.flash = 0;
+    $("arrival").style.display = "none";
+  }
+  trailPts.length = 0;
+}
+{
+  const track = $("progressTrack");
+  const scrub = (e) => {
+    const r = track.getBoundingClientRect();
+    setProgress((e.clientX - r.left) / r.width);
+  };
+  track.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    scrub(e);
+    const move = (ev) => scrub(ev);
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  });
+}
+
+// camera views with a short eased transition
+let camTween = null;
+function setView(pos, target) {
+  camTween = {
+    t: 0,
+    fromP: camera.position.clone(), toP: pos,
+    fromT: controls.target.clone(), toT: target
+  };
+}
+$("viewOverview").addEventListener("click", () =>
+  setView(new THREE.Vector3(-10, 38, 125), new THREE.Vector3(0, 0, 0)));
+$("viewSun").addEventListener("click", () =>
+  setView(new THREE.Vector3(SUN_X + 4, 10, 46), sun.position.clone()));
+$("viewEarth").addEventListener("click", () =>
+  setView(new THREE.Vector3(EARTH_X - 16, 6, 20), earth.position.clone()));
+controls.addEventListener("start", () => { camTween = null; });
+
+$("fs").addEventListener("click", () => {
+  try {
+    if (document.fullscreenElement) {
+      document.exitFullscreen();
+    } else {
+      const p = document.documentElement.requestFullscreen && document.documentElement.requestFullscreen();
+      if (p && p.catch) p.catch(() => {});
+    }
+  } catch (err) { /* fullscreen unavailable (e.g. sandboxed iframe) */ }
+});
+
+window.addEventListener("keydown", (e) => {
+  if (e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName || "")) return;
+  if (e.code === "Space") {
+    e.preventDefault();
+    if (state.progress >= 1) restart(); else setPlaying(!state.playing);
+  } else if (e.key === "r" || e.key === "R") restart();
+  else if (e.key === "1") setMode("wave");
+  else if (e.key === "2") setMode("particle");
+  else if (e.key === "3") setMode("both");
+});
+
 window.addEventListener("resize", () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
+
+if (typeof window.matchMedia === "function" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+  setPlaying(false);
+}
 
 // ---------- per-frame updates ----------
 function sceneWavelength() {
@@ -524,10 +705,23 @@ function updateWave(headX, time) {
   bLine.geometry.attributes.position.needsUpdate = true;
 }
 
-function updatePhoton(headPos) {
+function updatePhoton(headPos, dt) {
   const showDot = state.mode !== "wave";
   photon.visible = showDot && (state.progress > 0 && state.progress < 1 || state.flash > 0);
   trail.visible = state.mode === "particle" && state.progress > 0;
+  stream.visible = state.mode === "particle";
+
+  if (stream.visible) {
+    const p = streamGeom.attributes.position.array;
+    for (let i = 0; i < STREAM_N; i++) {
+      if (state.playing) streamProg[i] = (streamProg[i] + dt / state.journeySec) % 1;
+      p[i * 3] = THREE.MathUtils.lerp(START_X, END_X, streamProg[i]);
+      p[i * 3 + 1] = streamOff[i * 2];
+      p[i * 3 + 2] = streamOff[i * 2 + 1];
+    }
+    streamGeom.attributes.position.needsUpdate = true;
+  }
+
   if (!showDot) { trailGeom.setDrawRange(0, 0); return; }
 
   photon.position.copy(headPos);
@@ -572,7 +766,6 @@ function animate() {
       state.progress = 1;
       state.flash = 1;
       setPlaying(false);
-      $("playPause").textContent = "Play";
       $("arrival").style.display = "block";
     }
   }
@@ -583,13 +776,19 @@ function animate() {
   const headPos = new THREE.Vector3(headX, 0, 0);
 
   updateWave(headX, simTime);
-  updatePhoton(headPos);
+  updatePhoton(headPos, dt);
   updateStats();
 
   earth.rotation.y += dt * 0.15;
   sunGlow.scale.setScalar(SUN_R * (5.2 + Math.sin(simTime * 2.1) * 0.25 + Math.sin(simTime * 5.7) * 0.1));
 
-  if (state.follow && state.progress > 0 && state.progress < 1) {
+  if (camTween) {
+    camTween.t = Math.min(1, camTween.t + dt * 1.6);
+    const e = camTween.t * camTween.t * (3 - 2 * camTween.t);
+    camera.position.lerpVectors(camTween.fromP, camTween.toP, e);
+    controls.target.lerpVectors(camTween.fromT, camTween.toT, e);
+    if (camTween.t >= 1) camTween = null;
+  } else if (state.follow && state.progress > 0 && state.progress < 1) {
     controls.target.lerp(headPos, 0.06);
   }
   controls.update();
