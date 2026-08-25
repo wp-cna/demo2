@@ -48,6 +48,7 @@ module.exports = function (eleventyConfig) {
   const outputDir = process.env.SITE_OUTPUT_DIR || "_site";
 
   eleventyConfig.addPassthroughCopy({ "src/assets": "assets" });
+  eleventyConfig.ignores.add("src/assets/**");
 
   eleventyConfig.addFilter("absoluteUrl", (path = "", base = "") => {
     if (!path) return base;
